@@ -13,6 +13,7 @@ import com.willfp.ecoitems.items.EcoItemsRecipes
 import com.willfp.ecoitems.items.components.ComponentHandlers
 import com.willfp.ecoitems.items.ItemAttributeListener
 import com.willfp.ecoitems.items.ItemListener
+import com.willfp.ecoitems.items.SmithingProtection
 import com.willfp.ecoitems.libreforge.ConditionHasEcoItem
 import com.willfp.ecoitems.rarity.ArgParserRarity
 import com.willfp.ecoitems.rarity.Rarities
@@ -33,6 +34,10 @@ class EcoItemsPlugin : LibreforgePlugin() {
     }
 
     override fun handleEnable() {
+        SmithingProtection.reloadRules()
+        onReload {
+            server.asyncScheduler.runNow(this) { if (isEnabled) SmithingProtection.reloadRules() }
+        }
         Items.registerArgParser(ArgParserRarity)
         Items.registerTag(EcoItemTag)
 
@@ -53,7 +58,8 @@ class EcoItemsPlugin : LibreforgePlugin() {
         return listOf(
             DiscoverRecipeListener,
             ItemListener,
-            ItemAttributeListener
+            ItemAttributeListener,
+            SmithingProtection
         )
     }
 

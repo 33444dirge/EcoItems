@@ -29,7 +29,18 @@ val generateBuildConfig by tasks.registering {
 
 dependencies {
     compileOnly("io.papermc.paper:paper-api:1.21.8-R0.1-SNAPSHOT")
+    testImplementation("io.papermc.paper:paper-api:1.21.8-R0.1-SNAPSHOT")
+    testImplementation("org.jetbrains.kotlin:kotlin-stdlib:2.3.0")
 }
+
+val smithingRegression by tasks.registering(JavaExec::class) {
+    dependsOn(tasks.testClasses)
+    classpath = sourceSets.test.get().runtimeClasspath
+    mainClass.set("com.willfp.ecoitems.items.SmithingRulesTestKt")
+}
+tasks.check { dependsOn(smithingRegression) }
+// Regression is an executable Kotlin check; the repository has no JUnit suite.
+tasks.test { failOnNoDiscoveredTests.set(false) }
 
 tasks {
     compileKotlin {

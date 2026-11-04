@@ -1,0 +1,11 @@
+# EcoItems 锻造保护。物品按内部身份识别，与名称、lore、底层材质无关。
+# 每条规则支持多个 EcoItems ID 和多个准确的配方 ID；仅在两者同时命中时禁止。
+# items 当前只接受 ecoitems:<id>；其他提供者会报错并保留上一份有效规则。
+# 使用 /ecoitems reload 重载；使用 smithing-rules: {} 关闭全部规则。
+smithing-rules:
+  protect-halloween-crown:
+    items:
+      - "ecoitems:pumpkin_king_crown"
+    blocked-recipes:
+      - "enderite:dz_enderite_helmet"
+    message: "&c这件活动装备不能用于末地合金升级。"
