@@ -34,6 +34,7 @@ class EcoItemsPlugin : LibreforgePlugin() {
     }
 
     override fun handleEnable() {
+        onDisable { ItemAttributeListener.clearPendingRefreshes() }
         SmithingProtection.reloadRules()
         onReload {
             server.asyncScheduler.runNow(this) { if (isEnabled) SmithingProtection.reloadRules() }

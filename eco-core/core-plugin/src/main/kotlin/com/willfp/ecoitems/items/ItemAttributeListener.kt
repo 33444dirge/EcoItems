@@ -3,7 +3,6 @@ package com.willfp.ecoitems.items
 import com.willfp.ecoitems.plugin
 import com.willfp.libreforge.forceRefreshHolders
 import com.willfp.libreforge.toDispatcher
-import org.bukkit.Bukkit
 import org.bukkit.attribute.Attribute
 import org.bukkit.attribute.AttributeInstance
 import org.bukkit.attribute.AttributeModifier
@@ -17,10 +16,11 @@ import org.bukkit.event.inventory.InventoryDragEvent
 import org.bukkit.event.player.PlayerDropItemEvent
 import org.bukkit.event.player.PlayerItemHeldEvent
 import org.bukkit.event.player.PlayerSwapHandItemsEvent
+import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.inventory.EquipmentSlotGroup
+import org.bukkit.plugin.IllegalPluginAccessException
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
-import kotlin.math.max
 
 // https://minecraft.wiki/w/Attribute#Attack_Damage
 private const val PLAYER_BASE_ATTACK_DAMAGE = 1.0
@@ -33,6 +33,7 @@ private const val PLAYER_BASE_ENTITY_INTERACTION_RANGE = 3.0
 
 object ItemAttributeListener : Listener {
     private val applyingPlayers = ConcurrentHashMap<UUID, Boolean>()
+    private val pendingRefreshes = ConcurrentHashMap<UUID, Any>()
     @EventHandler
     fun handle(event: PlayerItemHeldEvent) {
         if (event.isCancelled) {
@@ -50,10 +51,7 @@ object ItemAttributeListener : Listener {
 
         event.itemDrop.itemStack.ecoItem ?: return
 
-        runOnEntityLater(event.player, 1) {
-            event.player.toDispatcher().forceRefreshHolders()
-            apply(event.player)
-        }
+        requestRefresh(event.player)
     }
 
 
@@ -83,45 +81,56 @@ object ItemAttributeListener : Listener {
             return
         }
 
-        runOnEntityLater(event.player, 1) {
-            event.player.toDispatcher().forceRefreshHolders()
-            apply(event.player)
-        }
+        requestRefresh(event.player)
     }
 
     @EventHandler
     fun handleInventoryClick(event: InventoryClickEvent) {
         val player = event.whoClicked as? Player ?: return
 
-        runOnEntityLater(player, 1) {
-            player.toDispatcher().forceRefreshHolders()
-            apply(player)
-        }
+        requestRefresh(player)
     }
 
     @EventHandler
     fun handleInventoryDrag(event: InventoryDragEvent) {
         val player = event.whoClicked as? Player ?: return
 
-        runOnEntityLater(player, 1) {
-            player.toDispatcher().forceRefreshHolders()
-            apply(player)
-        }
+        requestRefresh(player)
     }
 
-    private fun runOnEntityLater(player: Player, ticksLater: Long, task: () -> Unit) {
-        val delay = max(1L, ticksLater)
+    @EventHandler
+    fun handleQuit(event: PlayerQuitEvent) {
+        pendingRefreshes.remove(event.player.uniqueId)
+    }
+
+    internal fun clearPendingRefreshes() {
+        pendingRefreshes.clear()
+    }
+
+    private fun requestRefresh(player: Player) {
+        if (!plugin.isEnabled) return
+        val uuid = player.uniqueId
+        val request = Any()
+        if (pendingRefreshes.putIfAbsent(uuid, request) != null) return
+
         try {
-            // Folia - use entity's region scheduler to ensure thread safety
-            player.scheduler.runDelayed(
+            val scheduled = player.scheduler.runDelayed(
                 plugin,
-                { _ -> task() },
-                null,
-                delay
+                { _ ->
+                    // Release before callbacks: a new event during refresh needs its own next-tick pass.
+                    if (pendingRefreshes.remove(uuid, request) && plugin.isEnabled && player.isOnline) {
+                        player.toDispatcher().forceRefreshHolders()
+                        apply(player)
+                    }
+                },
+                { pendingRefreshes.remove(uuid, request) },
+                1L
             )
-        } catch (_: NoSuchMethodError) {
-            // Non-Folia fallback - use Bukkit scheduler
-            Bukkit.getScheduler().runTaskLater(plugin, Runnable { task() }, delay)
+            // An already-retired entity can reject without calling the retired callback.
+            if (scheduled == null) pendingRefreshes.remove(uuid, request)
+        } catch (ex: Exception) {
+            pendingRefreshes.remove(uuid, request)
+            if (ex !is IllegalPluginAccessException || plugin.isEnabled) throw ex
         }
     }
 
